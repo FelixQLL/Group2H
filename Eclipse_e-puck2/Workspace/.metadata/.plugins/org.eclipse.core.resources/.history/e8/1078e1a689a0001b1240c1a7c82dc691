@@ -1,0 +1,133 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <math.h>
+
+#include "ch.h"
+#include "hal.h"
+#include "memory_protection.h"
+#include <main.h>
+#include "sensors/proximity.h"
+#include "motors.h"
+#include "leds.h"
+#include "spi_comm.h"
+#include "sensors/VL53L0X/VL53L0X.h"
+#include "selector.h"
+#include "audio/audio_thread.h"
+#include "audio/play_melody.h"
+#include "audio/play_sound_file.h"
+
+void Task1();
+void Task2();
+
+int maxVel = 1200; //maximum velocity
+int distance = 200; //distance between e-puck2 and objectives
+
+int main(void)
+{
+    halInit();
+    chSysInit();
+    mpu_init();
+    clear_leds();
+    spi_comm_start();
+    proximity_start();
+    calibrate_ir();
+    motors_init();
+
+    /* Infinite loop. */
+    while (1) {
+    	if(get_selector() == 0){
+    		left_motor_set_speed(0);
+    		right_motor_set_speed(0);
+    	}
+    	else if(get_selector() == 1){
+    		Task1();
+    	}
+    	else if(get_selector() == 2){
+    	    Task2();
+    	}
+
+    }
+}
+
+#define STACK_CHK_GUARD 0xe2dee396
+uintptr_t __stack_chk_guard = STACK_CHK_GUARD;
+
+void __stack_chk_fail(void)
+{
+    chSysHalt("Stack smashing detected");
+}
+
+void Task1(){
+	//Task1
+	left_motor_set_speed(900);
+	right_motor_set_speed(1000);
+
+	if(get_prox(7) > 0 && get_prox(7) < distance){
+	    left_motor_set_speed(500);
+	    right_motor_set_speed(-200);
+	}
+	else if(get_prox(7) >= distance){
+	    left_motor_set_speed(500);
+	    right_motor_set_speed(100);
+	}
+	if(get_prox(6) > 0){
+	    left_motor_set_speed(500);
+	    right_motor_set_speed(200);
+	}
+	if(get_prox(0) > 0 && get_prox(0) < distance){
+	    left_motor_set_speed(-200);
+	    right_motor_set_speed(500);
+	}
+	else if(get_prox(0) >= distance){
+	    left_motor_set_speed(100);
+	    right_motor_set_speed(500);
+	}
+	if(get_prox(1) > 0){
+		left_motor_set_speed(200);
+	    right_motor_set_speed(500);
+	}
+
+}
+
+void Task2(){
+	//Task2
+	//no objects around e-puck2, go forward
+	if(get_prox(1) == 0 && get_prox(2) == 0 && get_prox(3) == 0
+	   && get_prox(4) == 0 && get_prox(5) == 0
+	   && get_prox(6) == 0 && get_prox(7) == 0
+	   && get_prox(8) == 0){
+		left_motor_set_speed(500);
+	    right_motor_set_speed(500);
+	}
+	//e-puck2 arrived around the object, stop to avoid collision
+	int StopDis = 100;
+	if((get_prox(1) > 0 && get_prox(1) < StopDis)
+			|| (get_prox(2) > 0 && get_prox(2) < StopDis)
+			|| (get_prox(3) > 0 && get_prox(3) < StopDis)
+			|| (get_prox(4) > 0 && get_prox(4) < StopDis)
+			|| (get_prox(5) > 0 && get_prox(5) < StopDis)
+			|| (get_prox(6) > 0 && get_prox(6) < StopDis)
+			|| (get_prox(7) > 0 && get_prox(7) < StopDis)
+			|| (get_prox(8) > 0 && get_prox(8) < StopDis)
+		){
+	    	left_motor_set_speed(0);
+	    	right_motor_set_speed(0);
+	   }
+	//Sensor 6,7 detect sth, turn left; Sensor 0,1 detect sth, turn right;
+	//otherwise, turn around to detect object.
+	if(get_prox(6) >= StopDis || get_prox(7) >= StopDis){
+	    left_motor_set_speed(-100);
+	    right_motor_set_speed(500);
+	}
+	else if(get_prox(0) >= StopDis || get_prox(1) >= StopDis){
+	    left_motor_set_speed(500);
+	    right_motor_set_speed(-100);
+	}
+	else if(get_prox(2) >= StopDis || get_prox(3) >= StopDis
+	    	|| get_prox(4) >= StopDis || get_prox(5) >= StopDis){
+	    	left_motor_set_speed(500);
+	    	right_motor_set_speed(-500);
+	    	chThdSleepMilliseconds(500);
+	}
+}
